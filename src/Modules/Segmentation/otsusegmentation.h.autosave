@@ -1,0 +1,13 @@
+#ifndef OTSUSEGMENTATION_H
+#define OTSUSEGMENTATION_H
+
+#include <createsegmentationmap.h>
+
+SegmentationMap otsuSegmentation(Mat1b& image)
+{
+    SegmentationMap sm
+    threshold(image, image, 0 ,255, THRESH_BINARY_INV | THRESH_OTSU );
+    return createSegmentationMap(image);
+}
+
+#endif // OTSUSEGMENTATION_H

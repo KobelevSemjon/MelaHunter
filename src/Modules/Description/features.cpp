@@ -1,7 +1,13 @@
 #include "features.h"
 
 AbstractFeatures::AbstractFeatures(){}
-AbstractFeatures::AbstractFeatures(Mat1b &&image, Mat1b &&mask, string prefix):_image(image),_mask(mask),_prefix(prefix)
+
+AbstractFeatures::AbstractFeatures(Mat1b image, Mat1b mask, string prefix):_image(image),_mask(mask),_prefix(prefix)
+{
+    if (image.size() != mask.size())
+        throw std::invalid_argument("Features: image.size() != mask.size()");
+}
+AbstractFeatures::AbstractFeatures(Mat1b &&image, Mat1b &&mask, string prefix):_image(move(image)),_mask(move(mask)),_prefix(prefix)
 {
     if (image.size() != mask.size())
         throw std::invalid_argument("Features: image.size() != mask.size()");
@@ -24,8 +30,12 @@ void AbstractFeatures::all(){}
 
 AbstractFeatures::~AbstractFeatures(){}
 
+ColorFeatures::ColorFeatures(Mat1b image, Mat1b mask, string prefix)
+    :AbstractFeatures(image, mask, prefix){}
+
+
 ColorFeatures::ColorFeatures(Mat1b &&image, Mat1b &&mask, string prefix)
-    :AbstractFeatures(move(image), move(mask), prefix){}
+    :AbstractFeatures(image, mask, prefix){}
 
 ColorFeatures &ColorFeatures::minMax()
 {
@@ -41,14 +51,50 @@ ColorFeatures &ColorFeatures::meanStdDev()
     return *this;
 }
 
+ColorFeatures &ColorFeatures::absoluteRadialAsymmetry(string penalty_prefix, function<double (uchar, uchar)> inside_penalty, function<double (uchar, uchar)> outside_penalty)
+{
+    double ara = 0; const int cols = _image.cols; const int rows = _image.rows;
+
+    int pixels_passed = 0;
+    for (int y = 0; y < rows; ++y)
+        for (int x = 0; x < cols; ++x)
+        {
+            Point str_pos = {x,y};
+            Point mir_pos = {cols-1-x, rows-1-y};
+            uchar x1 = _image(str_pos);
+            uchar x2 = _image(mir_pos);
+            if ((_mask(str_pos)!=0) && (_mask(mir_pos)!=0))
+                ara += inside_penalty(x1,x2);
+            if ((_mask(str_pos)!=0) && (_mask(mir_pos)!=0))
+                ara += outside_penalty(x1,x2);
+
+            if (pixels_passed < (rows*cols)/2) ++pixels_passed;
+            else {x = cols; y = rows;} //break
+        }
+    _dict[penalty_prefix+"ARA"] = ara;
+    return *this;
+}
+
 void ColorFeatures::all()
 {
-    minMax().meanStdDev();
+    minMax()
+   .meanStdDev()
+   .absoluteRadialAsymmetry()
+   .absoluteRadialAsymmetry("L2_NO_", penalty::L2, penalty::NO)
+   .absoluteRadialAsymmetry("L1_", penalty::L1, penalty::L1)
+   .absoluteRadialAsymmetry("L2_", penalty::L2, penalty::L2);
 }
 
 
-MorphoFeatures::MorphoFeatures(Mat1b &&image, Mat1b &&mask, string prefix):AbstractFeatures(move(image), move(mask), prefix)
+MorphoFeatures::MorphoFeatures(Mat1b mask, string prefix)
 {
+    _image = Mat1b(), _mask = mask ,_prefix = prefix;
+    findContours(mask, _contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
+}
+
+MorphoFeatures::MorphoFeatures(Mat1b &&mask, string prefix)
+{
+    _image = Mat1b(), _mask = mask ,_prefix = prefix;
     findContours(mask, _contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
 }
 
@@ -68,3 +114,8 @@ MorphoFeatures &MorphoFeatures::perimeter()
 }
 
 void MorphoFeatures::all(){area().perimeter();}
+
+
+
+
+

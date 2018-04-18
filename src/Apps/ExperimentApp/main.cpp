@@ -13,12 +13,25 @@ int main(int argc, char *argv[])
 
     QCoreApplication a(argc, argv);
 
-    Mat3b img = imread("C:\\qt_pro\\DST\\3_dataset\\dots_296.jpg");
-    Mat1b plane(img.size());
-    extractChannel(img, plane, 0);// blue
-    Mat1i markers(img.size());
+    Mat3b moc = imread("C:\\qt_pro\\DST\\3_dataset\\dots_296.jpg");
+    pyrMeanShiftFiltering(moc, moc, 10, 5, 0); //!!!!
+    Mat1b plane(moc.size());
+    Mat1i markers(moc.size());
+    extractChannel(moc, plane, 0);// blue
+    //plane.forEach([](uchar& pix, const int* pos){if(pix<5) pix=255;});
+    Canny(plane,plane,5,10);
 
-    int radius = 5;
+    std::vector<std::vector<Point> > contours;
+    std::vector<Vec4i> hierarchy;
+    findContours(plane, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+    int compCount = 0;
+    for(int idx = 0; idx >= 0; idx = hierarchy[idx][0], compCount++)
+    {
+       drawContours(markers, contours, idx, Scalar::all(compCount+1), -1, 8, hierarchy, INT_MAX);
+    }
+
+/*
+    int radius = 10;
     //Локальные минимумы
     markers.forEach([&](int& pix, const int* pos)
     {
@@ -42,9 +55,9 @@ int main(int argc, char *argv[])
             floodFill(markers,seed,0);
             pix = mark_counter++;
         }
-    });
+    });*/
 
-    watershed(img, markers);
+    watershed(moc, markers);
     markers.forEach([&](int& pix, const int* pos)
     {
         if (pix==-1)
@@ -67,39 +80,77 @@ int main(int argc, char *argv[])
         }
     });
 
+
     auto sm = createSegmentationMap(markers); //Составление карты сегментации
+    Mat3b img = imread("C:\\qt_pro\\DST\\3_dataset\\dots_296.jpg");
+    for (int id: sm.identifiers())
+    {
+        sm.cut(id).drawBorder(img);
+    }    
+    imshow( "image", img);
+
 //    map<int, double> means_map;
 //    for (int id = 0; id < sm.length() ;++id)
 //    {
 //        Segment seg = sm.cut(id);
 //        means_map[id] = mean(seg.from(plane),seg.mask())[0];
 //    }
-
+/*
     DataFrame df("Names");
 
     for(int id = 0; id < sm.length() ;++id)
     {
         Segment seg = sm.cut(id);
-        ColorFeatures colorf(seg.from(plane),Mat1b(seg.mask()),"B_");
-        MorphoFeatures morphof(seg.from(plane),Mat1b(seg.mask()));
-        colorf.all(); morphof.all();
+        Mat3b fragment = seg.from(img);
+
+        MorphoFeatures morphof(seg.mask());
+
+        Mat1b channel_0(fragment.size());  extractChannel(fragment, channel_0, 0);
+        Mat1b channel_1(fragment.size());  extractChannel(fragment, channel_1, 1);
+        Mat1b channel_2(fragment.size());  extractChannel(fragment, channel_2, 2);
+
+        ColorFeatures B_feat(channel_0, seg.mask(),"B_");   B_feat.all();
+        ColorFeatures G_feat(channel_1, seg.mask(),"G_");   G_feat.all();
+        ColorFeatures R_feat(channel_2, seg.mask(),"R_");   R_feat.all();
+
+        cvtColor(fragment,fragment,cv::COLOR_BGR2HSV);
+
+        extractChannel(fragment, channel_0, 0);
+        extractChannel(fragment, channel_1, 1);
+        extractChannel(fragment, channel_2, 2);
+
+        ColorFeatures H_feat(channel_0, seg.mask(),"H_");   H_feat.all();
+        ColorFeatures S_feat(channel_1, seg.mask(),"S_");   S_feat.all();
+        ColorFeatures V_feat(channel_2, seg.mask(),"V_");   V_feat.all();
 
 
         ObjectDescription obj(to_string(id));
-        obj << colorf.features()
-            << morphof.features()
-            << sm.neighbors(id).size();
+        obj << morphof.features()
+            << sm.neighbors(id).size()
+            << B_feat.features()
+            << G_feat.features()
+            << R_feat.features()
+            << H_feat.features()
+            << S_feat.features()
+            << V_feat.features();
+
         if (id == 0)
         {
             list<string> header{"class"};
-            header.splice(end(header), colorf.header());
             header.splice(end(header), morphof.header());
             header.push_back("NEIGH");
+            header.splice(end(header), B_feat.header());
+            header.splice(end(header), G_feat.header());
+            header.splice(end(header), R_feat.header());
+            header.splice(end(header), H_feat.header());
+            header.splice(end(header), S_feat.header());
+            header.splice(end(header), V_feat.header());
             df.setHeader(header);
         }
         df.newObject(obj);
     }
     df.write("C:\\MelaHunter\\test.csv");
-
+    cout << "END";
+*/
     return a.exec();
 }
